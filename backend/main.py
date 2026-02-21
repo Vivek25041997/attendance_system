@@ -5,8 +5,11 @@ from datetime import date, datetime
 from typing import List
 
 from database import engine, get_db, Base
+# Import SQLAlchemy models
 from models import Employee, Attendance
-from schemas import EmployeeCreate, Employee, AttendanceCreate, Attendance, AttendanceWithEmployee
+# Import Pydantic schemas - use alias to avoid naming conflict
+from schemas import EmployeeCreate, AttendanceCreate, AttendanceWithEmployee
+from schemas import Employee as EmployeeResponse, Attendance as AttendanceResponse
 from crud import (
     create_employee, get_employees, get_employee,
     create_attendance, get_attendances, get_attendance_by_employee,
@@ -18,10 +21,10 @@ Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="Office Attendance System API")
 
-# Enable CORS
+# Enable CORS - allow both frontend ports
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=["http://localhost:5173", "http://localhost:5174"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -106,7 +109,7 @@ async def startup_event():
     seed_data()
 
 # Employee Routes
-@app.post("/employees/", response_model=Employee)
+@app.post("/employees/", response_model=EmployeeResponse)
 def create_employee_endpoint(employee: EmployeeCreate, db: Session = Depends(get_db)):
     # Check if email already exists
     existing = db.query(Employee).filter(Employee.email == employee.email).first()
@@ -114,12 +117,12 @@ def create_employee_endpoint(employee: EmployeeCreate, db: Session = Depends(get
         raise HTTPException(status_code=400, detail="Email already registered")
     return create_employee(db=db, employee=employee)
 
-@app.get("/employees/", response_model=List[Employee])
+@app.get("/employees/", response_model=List[EmployeeResponse])
 def read_employees(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
     employees = get_employees(db, skip=skip, limit=limit)
     return employees
 
-@app.get("/employees/{employee_id}", response_model=Employee)
+@app.get("/employees/{employee_id}", response_model=EmployeeResponse)
 def read_employee(employee_id: int, db: Session = Depends(get_db)):
     db_employee = get_employee(db, employee_id=employee_id)
     if db_employee is None:
@@ -127,7 +130,7 @@ def read_employee(employee_id: int, db: Session = Depends(get_db)):
     return db_employee
 
 # Attendance Routes
-@app.post("/attendance/", response_model=Attendance)
+@app.post("/attendance/", response_model=AttendanceResponse)
 def create_attendance_endpoint(attendance: AttendanceCreate, db: Session = Depends(get_db)):
     # Verify employee exists
     employee = get_employee(db, employee_id=attendance.employee_id)
@@ -150,7 +153,7 @@ def read_attendances(skip: int = 0, limit: int = 100, db: Session = Depends(get_
     attendances = get_attendances(db, skip=skip, limit=limit)
     return attendances
 
-@app.get("/attendance/{employee_id}", response_model=List[Attendance])
+@app.get("/attendance/{employee_id}", response_model=List[AttendanceResponse])
 def read_attendance_by_employee(employee_id: int, db: Session = Depends(get_db)):
     attendances = get_attendance_by_employee(db, employee_id=employee_id)
     return attendances

@@ -34,7 +34,7 @@ const Navbar = () => {
               </div>
               <div className="hidden md:block text-left">
                 <p className="text-sm font-medium text-gray-700">Admin User</p>
-                <p className="text-xs text-gray-500">admin@attendancepro.com</p>
+                <p className="text-xs text-gray-500">admin@attendance.com</p>
               </div>
               <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${showDropdown ? 'rotate-180' : ''}`} />
             </button>

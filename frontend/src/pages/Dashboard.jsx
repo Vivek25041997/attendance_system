@@ -277,7 +277,7 @@ const Dashboard = () => {
   }
 
   return (
-    <div className="ml-64 pt-16 min-h-screen bg-gradient-to-br from-gray-50 via-purple-50/30 to-indigo-50/30">
+    <div className="ml-50 pt-16 min-h-screen bg-gradient-to-br from-gray-50 via-purple-50/30 to-indigo-50/30">
       <div className="p-6 space-y-6">
         <div className="flex items-center justify-between">
           <div>

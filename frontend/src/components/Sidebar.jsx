@@ -23,7 +23,7 @@ const Sidebar = () => {
             <Clock className="w-6 h-6 text-white" />
           </div>
           <div>
-            <h1 className="text-xl font-bold text-white">AttendancePro</h1>
+            <h1 className="text-xl font-bold text-white">Attendance</h1>
             <p className="text-xs text-white/70">Admin Portal</p>
           </div>
         </div>
@@ -49,13 +49,6 @@ const Sidebar = () => {
           );
         })}
       </nav>
-
-      <div className="p-4 border-t border-white/10">
-        <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4">
-          <p className="text-white/80 text-sm font-medium">Version 1.0</p>
-          <p className="text-white/60 text-xs mt-1">© 2026 AttendancePro</p>
-        </div>
-      </div>
     </aside>
   );
 };
