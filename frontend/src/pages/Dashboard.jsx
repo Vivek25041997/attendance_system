@@ -11,7 +11,7 @@ import {
   Tooltip,
   Legend,
 } from 'chart.js';
-import { Users, CheckCircle, XCircle, Clock, TrendingUp } from 'lucide-react';
+import { Users, CheckCircle, XCircle, Clock, TrendingUp, Zap } from 'lucide-react';
 
 ChartJS.register(
   CategoryScale,
@@ -29,6 +29,7 @@ const Dashboard = () => {
     present_today: 0,
     absent_today: 0,
     late_today: 0,
+    total_overtime_today: 0,
     today_attendance: [],
   });
   const [allAttendances, setAllAttendances] = useState([]);
@@ -39,6 +40,7 @@ const Dashboard = () => {
     present_today: 0,
     absent_today: 0,
     late_today: 0,
+    total_overtime_today: 0,
   });
 
   useEffect(() => {
@@ -86,7 +88,7 @@ const Dashboard = () => {
             current = target;
             clearInterval(timer);
           }
-          setAnimatedStats((prev) => ({ ...prev, [key]: Math.floor(current) }));
+          setAnimatedStats((prev) => ({ ...prev, [key]: Math.floor(current * 10) / 10 }));
         }, stepDuration);
       }
     });
@@ -118,6 +120,11 @@ const Dashboard = () => {
       month: 'short',
       day: 'numeric',
     });
+  };
+
+  const formatHours = (hours) => {
+    if (hours === null || hours === undefined) return '-';
+    return `${hours} hrs`;
   };
 
   const barChartData = {
@@ -248,20 +255,20 @@ const Dashboard = () => {
       textColor: 'text-green-600',
     },
     {
-      title: 'Absent Today',
-      value: animatedStats.absent_today,
-      icon: XCircle,
-      gradient: 'from-red-500 to-rose-500',
-      bgGradient: 'from-red-50 to-rose-50',
-      textColor: 'text-red-600',
-    },
-    {
       title: 'Late Today',
       value: animatedStats.late_today,
       icon: Clock,
       gradient: 'from-yellow-500 to-amber-500',
       bgGradient: 'from-yellow-50 to-amber-50',
       textColor: 'text-yellow-600',
+    },
+    {
+      title: 'Total Overtime',
+      value: `${animatedStats.total_overtime_today} hrs`,
+      icon: Zap,
+      gradient: 'from-purple-500 to-violet-500',
+      bgGradient: 'from-purple-50 to-violet-50',
+      textColor: 'text-purple-600',
     },
   ];
 
@@ -337,13 +344,15 @@ const Dashboard = () => {
                   <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Date</th>
                   <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Check In</th>
                   <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Check Out</th>
+                  <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Total Hours</th>
+                  <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Overtime</th>
                   <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Status</th>
                 </tr>
               </thead>
               <tbody>
                 {stats.today_attendance.length === 0 ? (
                   <tr>
-                    <td colSpan="5" className="text-center py-8 text-gray-500">
+                    <td colSpan="7" className="text-center py-8 text-gray-500">
                       No attendance records for today
                     </td>
                   </tr>
@@ -359,6 +368,14 @@ const Dashboard = () => {
                       <td className="py-4 px-4 text-gray-600">{formatDate(record.date)}</td>
                       <td className="py-4 px-4 text-gray-600">{formatDateTime(record.check_in)}</td>
                       <td className="py-4 px-4 text-gray-600">{formatDateTime(record.check_out)}</td>
+                      <td className="py-4 px-4 text-gray-600">{formatHours(record.total_hours)}</td>
+                      <td className="py-4 px-4">
+                        {record.overtime_hours > 0 ? (
+                          <span className="text-sm font-medium text-purple-600">{formatHours(record.overtime_hours)}</span>
+                        ) : (
+                          <span className="text-sm text-gray-400">-</span>
+                        )}
+                      </td>
                       <td className="py-4 px-4">
                         <span
                           className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold border ${getStatusColor(
@@ -367,6 +384,11 @@ const Dashboard = () => {
                         >
                           {record.status}
                         </span>
+                        {record.overtime_hours > 0 && (
+                          <span className="ml-1 px-2 py-0.5 text-xs font-semibold rounded-full bg-purple-100 text-purple-800">
+                            OT
+                          </span>
+                        )}
                       </td>
                     </tr>
                   ))

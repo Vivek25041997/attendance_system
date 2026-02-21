@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Date, DateTime, ForeignKey
+from sqlalchemy import Column, Integer, String, Date, DateTime, Float, ForeignKey
 from sqlalchemy.orm import relationship
 from database import Base
 
@@ -20,6 +20,8 @@ class Attendance(Base):
     date = Column(Date, nullable=False)
     check_in = Column(DateTime, nullable=True)
     check_out = Column(DateTime, nullable=True)
+    total_hours = Column(Float, nullable=True)  # Calculated: check_out - check_in
+    overtime_hours = Column(Float, nullable=True)  # Calculated: total_hours - 9 (if > 9)
     status = Column(String, nullable=False)  # Present / Absent / Late
 
     employee = relationship("Employee", back_populates="attendances")

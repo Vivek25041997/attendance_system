@@ -1,32 +1,56 @@
 import { useState, useEffect } from 'react';
-import { getAttendances, createAttendance, getEmployees } from '../api/api';
+import { getAttendances, getTodayAttendance, getEmployees, checkIn, checkOut, getMyTodayAttendance } from '../api/api';
+import { Clock, LogIn, LogOut, Timer, CheckCircle, XCircle, AlertCircle } from 'lucide-react';
 
 const Attendance = () => {
   const [attendances, setAttendances] = useState([]);
   const [employees, setEmployees] = useState([]);
+  const [selectedEmployee, setSelectedEmployee] = useState('');
+  const [myAttendance, setMyAttendance] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [formData, setFormData] = useState({
-    employee_id: '',
-    date: new Date().toISOString().split('T')[0],
-    check_in: '',
-    check_out: '',
-    status: 'Present',
-  });
-  const [showForm, setShowForm] = useState(false);
-  const [error, setError] = useState('');
+  const [actionLoading, setActionLoading] = useState(false);
+  const [elapsedTime, setElapsedTime] = useState(0);
+  const [message, setMessage] = useState({ type: '', text: '' });
 
   useEffect(() => {
     fetchData();
   }, []);
 
+  useEffect(() => {
+    let interval;
+    if (myAttendance?.checked_in && !myAttendance?.checked_out) {
+      interval = setInterval(() => {
+        const checkInTime = new Date(myAttendance.check_in);
+        const now = new Date();
+        const diff = Math.floor((now - checkInTime) / 1000);
+        setElapsedTime(diff);
+      }, 1000);
+    } else {
+      setElapsedTime(0);
+    }
+    return () => clearInterval(interval);
+  }, [myAttendance]);
+
   const fetchData = async () => {
     try {
-      const [attendanceRes, employeesRes] = await Promise.all([
-        getAttendances(),
-        getEmployees(),
-      ]);
+      console.log('Fetching data...');
+      const employeesRes = await getEmployees();
+      console.log('Employees response:', employeesRes.data);
+      
+      const attendanceRes = await getAttendances();
+      console.log('Attendance response:', attendanceRes.data);
+      
       setAttendances(attendanceRes.data);
       setEmployees(employeesRes.data);
+      
+      if (employeesRes.data && employeesRes.data.length > 0) {
+        const firstEmployeeId = employeesRes.data[0].id;
+        console.log('Setting selected employee:', firstEmployeeId);
+        setSelectedEmployee(firstEmployeeId);
+        await fetchMyAttendance(firstEmployeeId);
+      } else {
+        console.log('No employees found');
+      }
       setLoading(false);
     } catch (error) {
       console.error('Error fetching data:', error);
@@ -34,65 +58,99 @@ const Attendance = () => {
     }
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setError('');
-
-    if (!formData.employee_id || !formData.date || !formData.status) {
-      setError('Employee, Date, and Status are required');
-      return;
-    }
-
+  const fetchMyAttendance = async (employeeId) => {
     try {
-      const attendanceData = {
-        ...formData,
-        employee_id: parseInt(formData.employee_id),
-        check_in: formData.check_in || null,
-        check_out: formData.check_out || null,
-      };
-
-      await createAttendance(attendanceData);
-      setFormData({
-        employee_id: '',
-        date: new Date().toISOString().split('T')[0],
-        check_in: '',
-        check_out: '',
-        status: 'Present',
-      });
-      setShowForm(false);
-      fetchData();
+      const res = await getMyTodayAttendance(employeeId);
+      setMyAttendance(res.data);
     } catch (error) {
-      if (error.response?.data?.detail) {
-        setError(error.response.data.detail);
-      } else {
-        setError('Failed to mark attendance');
-      }
+      console.error('Error fetching my attendance:', error);
     }
   };
 
-  const handleChange = (e) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value,
+  const handleEmployeeChange = async (e) => {
+    const employeeId = parseInt(e.target.value);
+    setSelectedEmployee(employeeId);
+    await fetchMyAttendance(employeeId);
+  };
+
+  const handleCheckIn = async () => {
+    if (!selectedEmployee) {
+      setMessage({ type: 'error', text: 'Please select an employee' });
+      return;
+    }
+    setActionLoading(true);
+    setMessage({ type: '', text: '' });
+    try {
+      const res = await checkIn(selectedEmployee);
+      setMessage({ type: 'success', text: res.data.message });
+      await fetchMyAttendance(selectedEmployee);
+      fetchData();
+    } catch (error) {
+      setMessage({ type: 'error', text: error.response?.data?.detail || 'Failed to check in' });
+    }
+    setActionLoading(false);
+  };
+
+  const handleCheckOut = async () => {
+    if (!selectedEmployee) {
+      setMessage({ type: 'error', text: 'Please select an employee' });
+      return;
+    }
+    setActionLoading(true);
+    setMessage({ type: '', text: '' });
+    try {
+      const res = await checkOut(selectedEmployee);
+      setMessage({ type: 'success', text: res.data.message });
+      await fetchMyAttendance(selectedEmployee);
+      fetchData();
+    } catch (error) {
+      setMessage({ type: 'error', text: error.response?.data?.detail || 'Failed to check out' });
+    }
+    setActionLoading(false);
+  };
+
+  const formatTime = (seconds) => {
+    const hrs = Math.floor(seconds / 3600);
+    const mins = Math.floor((seconds % 3600) / 60);
+    const secs = seconds % 60;
+    return `${hrs.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  const formatTimeOnly = (dateTime) => {
+    if (!dateTime) return 'N/A';
+    return new Date(dateTime).toLocaleTimeString('en-US', {
+      hour: '2-digit',
+      minute: '2-digit',
     });
   };
 
-  const formatDateTime = (dateTime) => {
-    if (!dateTime) return 'N/A';
-    return new Date(dateTime).toLocaleString();
+  const formatHours = (hours) => {
+    if (hours === null || hours === undefined) return 'N/A';
+    return `${hours} hrs`;
   };
 
   const getStatusColor = (status) => {
     switch (status) {
       case 'Present':
-        return 'bg-green-100 text-green-800';
+        return 'bg-green-100 text-green-800 border-green-200';
       case 'Absent':
-        return 'bg-red-100 text-red-800';
+        return 'bg-red-100 text-red-800 border-red-200';
       case 'Late':
-        return 'bg-yellow-100 text-yellow-800';
+        return 'bg-yellow-100 text-yellow-800 border-yellow-200';
       default:
-        return 'bg-gray-100 text-gray-800';
+        return 'bg-gray-100 text-gray-800 border-gray-200';
     }
+  };
+
+  const getOvertimeBadge = (overtime) => {
+    if (overtime && overtime > 0) {
+      return (
+        <span className="ml-2 px-2 py-1 text-xs font-semibold rounded-full bg-purple-100 text-purple-800 border border-purple-200">
+          Overtime
+        </span>
+      );
+    }
+    return null;
   };
 
   if (loading) {
@@ -113,114 +171,116 @@ const Attendance = () => {
           <h1 className="text-3xl font-bold text-gray-800">Attendance</h1>
           <p className="text-gray-500 mt-1">Track and manage employee attendance</p>
         </div>
-        <button
-          onClick={() => setShowForm(!showForm)}
-          className="bg-gradient-to-r from-purple-600 to-indigo-600 text-white px-6 py-3 rounded-xl hover:from-purple-700 hover:to-indigo-700 transition-all duration-200 shadow-lg hover:shadow-xl font-medium"
-        >
-          {showForm ? 'Cancel' : 'Mark Attendance'}
-        </button>
       </div>
 
-      {showForm && (
-        <div className="bg-white/80 backdrop-blur-sm p-6 rounded-2xl shadow-lg mb-6 border border-white/50">
-          <h2 className="text-xl font-semibold mb-4 text-gray-800">Mark Attendance</h2>
-          {error && (
-            <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
-              {error}
-            </div>
-          )}
-          <form onSubmit={handleSubmit}>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Employee
-                </label>
-                <select
-                  name="employee_id"
-                  value={formData.employee_id}
-                  onChange={handleChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  required
-                >
-                  <option value="">Select Employee</option>
-                  {employees.map((emp) => (
-                    <option key={emp.id} value={emp.id}>
-                      {emp.name} - {emp.department}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Date
-                </label>
-                <input
-                  type="date"
-                  name="date"
-                  value={formData.date}
-                  onChange={handleChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Check In
-                </label>
-                <input
-                  type="datetime-local"
-                  name="check_in"
-                  value={formData.check_in}
-                  onChange={handleChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Check Out
-                </label>
-                <input
-                  type="datetime-local"
-                  name="check_out"
-                  value={formData.check_out}
-                  onChange={handleChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Status
-                </label>
-                <select
-                  name="status"
-                  value={formData.status}
-                  onChange={handleChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  required
-                >
-                  <option value="Present">Present</option>
-                  <option value="Absent">Absent</option>
-                  <option value="Late">Late</option>
-                </select>
-              </div>
-            </div>
-            <button
-              type="submit"
-              className="mt-4 bg-gradient-to-r from-green-600 to-emerald-600 text-white px-6 py-3 rounded-xl hover:from-green-700 hover:to-emerald-700 transition-all duration-200 shadow-lg hover:shadow-xl font-medium"
-            >
-              Mark Attendance
-            </button>
-          </form>
+      {/* Check In/Out Section */}
+      <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg p-6 mb-6 border border-white/50">
+        <h2 className="text-xl font-semibold mb-4 text-gray-800">Daily Check In/Out</h2>
+        
+        {/* Employee Selector */}
+        <div className="mb-6">
+          <label className="block text-sm font-medium text-gray-700 mb-2">Select Employee</label>
+          <select
+            value={selectedEmployee}
+            onChange={handleEmployeeChange}
+            className="w-full md:w-64 px-4 py-2 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 bg-white"
+          >
+            <option value="">Select Employee</option>
+            {employees.map((emp) => (
+              <option key={emp.id} value={emp.id}>
+                {emp.name} - {emp.department}
+              </option>
+            ))}
+          </select>
         </div>
-      )}
 
+        {/* Live Timer */}
+        {myAttendance?.checked_in && !myAttendance?.checked_out && (
+          <div className="bg-gradient-to-r from-purple-500 to-indigo-600 rounded-2xl p-6 mb-6 text-white">
+            <div className="flex items-center justify-center">
+              <Timer className="w-8 h-8 mr-3" />
+              <div className="text-center">
+                <p className="text-purple-100 text-sm font-medium mb-1">Working Duration</p>
+                <p className="text-4xl font-bold">{formatTime(elapsedTime)}</p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Status Display */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+          <div className="bg-gray-50 rounded-xl p-4 text-center">
+            <p className="text-gray-500 text-sm">Check In</p>
+            <p className="text-lg font-semibold text-gray-800">{formatTimeOnly(myAttendance?.check_in)}</p>
+          </div>
+          <div className="bg-gray-50 rounded-xl p-4 text-center">
+            <p className="text-gray-500 text-sm">Check Out</p>
+            <p className="text-lg font-semibold text-gray-800">{formatTimeOnly(myAttendance?.check_out)}</p>
+          </div>
+          <div className="bg-gray-50 rounded-xl p-4 text-center">
+            <p className="text-gray-500 text-sm">Total Hours</p>
+            <p className="text-lg font-semibold text-gray-800">{formatHours(myAttendance?.total_hours)}</p>
+          </div>
+          <div className="bg-gray-50 rounded-xl p-4 text-center">
+            <p className="text-gray-500 text-sm">Overtime</p>
+            <p className="text-lg font-semibold text-gray-800">{formatHours(myAttendance?.overtime_hours)}</p>
+          </div>
+        </div>
+
+        {/* Action Buttons */}
+        <div className="flex gap-4 mb-4">
+          <button
+            onClick={handleCheckIn}
+            disabled={actionLoading || myAttendance?.checked_in}
+            className={`flex-1 flex items-center justify-center py-4 rounded-xl font-medium transition-all duration-200 ${
+              myAttendance?.checked_in
+                ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                : 'bg-gradient-to-r from-green-500 to-emerald-600 text-white hover:from-green-600 hover:to-emerald-700 shadow-lg hover:shadow-xl'
+            }`}
+          >
+            <LogIn className="w-5 h-5 mr-2" />
+            {actionLoading ? 'Processing...' : 'Check In'}
+          </button>
+          <button
+            onClick={handleCheckOut}
+            disabled={actionLoading || !myAttendance?.checked_in || myAttendance?.checked_out}
+            className={`flex-1 flex items-center justify-center py-4 rounded-xl font-medium transition-all duration-200 ${
+              !myAttendance?.checked_in || myAttendance?.checked_out
+                ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                : 'bg-gradient-to-r from-red-500 to-rose-600 text-white hover:from-red-600 hover:to-rose-700 shadow-lg hover:shadow-xl'
+            }`}
+          >
+            <LogOut className="w-5 h-5 mr-2" />
+            {actionLoading ? 'Processing...' : 'Check Out'}
+          </button>
+        </div>
+
+        {/* Status Badge */}
+        {myAttendance?.status && (
+          <div className="flex items-center justify-center">
+            <span className={`px-4 py-2 rounded-full text-sm font-semibold border ${getStatusColor(myAttendance.status)}`}>
+              {myAttendance.status}
+            </span>
+            {getOvertimeBadge(myAttendance.overtime_hours)}
+          </div>
+        )}
+
+        {/* Message */}
+        {message.text && (
+          <div className={`mt-4 p-4 rounded-xl flex items-center ${
+            message.type === 'success' ? 'bg-green-100 text-green-800 border border-green-200' : 'bg-red-100 text-red-800 border border-red-200'
+          }`}>
+            {message.type === 'success' ? <CheckCircle className="w-5 h-5 mr-2" /> : <AlertCircle className="w-5 h-5 mr-2" />}
+            {message.text}
+          </div>
+        )}
+      </div>
+
+      {/* Attendance Table */}
       <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg overflow-hidden border border-white/50">
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
             <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                ID
-              </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Employee
               </th>
@@ -234,6 +294,12 @@ const Attendance = () => {
                 Check Out
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Total Hours
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Overtime
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Status
               </th>
             </tr>
@@ -241,16 +307,13 @@ const Attendance = () => {
           <tbody className="bg-white divide-y divide-gray-200">
             {attendances.length === 0 ? (
               <tr>
-                <td colSpan="6" className="px-6 py-4 text-center text-gray-500">
+                <td colSpan="7" className="px-6 py-4 text-center text-gray-500">
                   No attendance records found
                 </td>
               </tr>
             ) : (
               attendances.map((attendance) => (
                 <tr key={attendance.id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {attendance.id}
-                  </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                     {attendance.employee?.name || 'N/A'}
                   </td>
@@ -258,19 +321,30 @@ const Attendance = () => {
                     {new Date(attendance.date).toLocaleDateString()}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {formatDateTime(attendance.check_in)}
+                    {formatTimeOnly(attendance.check_in)}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {formatDateTime(attendance.check_out)}
+                    {formatTimeOnly(attendance.check_out)}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    {formatHours(attendance.total_hours)}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <span
-                      className={`px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(
-                        attendance.status
-                      )}`}
-                    >
+                    {attendance.overtime_hours > 0 ? (
+                      <span className="text-sm font-medium text-purple-600">{formatHours(attendance.overtime_hours)}</span>
+                    ) : (
+                      <span className="text-sm text-gray-400">-</span>
+                    )}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold border ${getStatusColor(attendance.status)}`}>
                       {attendance.status}
                     </span>
+                    {attendance.overtime_hours > 0 && (
+                      <span className="ml-1 px-2 py-0.5 text-xs font-semibold rounded-full bg-purple-100 text-purple-800">
+                        OT
+                      </span>
+                    )}
                   </td>
                 </tr>
               ))
